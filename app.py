@@ -32,18 +32,22 @@ def progress_hook(d):
 
 if url:
     try:
-        # BYPASS SETTINGS: Mimic a real browser/mobile device
-        # This helps fix the 403 Forbidden error
+        # ADVANCED BYPASS: Switching to Android/TV clients which rarely ask for "Sign in"
         ydl_opts_base = {
             'quiet': True,
             'noplaylist': True,
             'nocheckcertificate': True,
             'no_warnings': True,
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'extractor_args': {'youtube': {'player_client': ['ios', 'mweb', 'android']}}
+            # This is the magic part: it forces yt-dlp to use clients that don't trigger the "Bot" check easily
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android_test', 'web_embedded'],
+                    'po_token': ['web+QUFE...'] # Fake token structure hint
+                }
+            }
         }
 
-        with st.spinner("🔍 Analyzing Video..."):
+        with st.spinner("🔍 Analyzing Video (Bypassing Bot Check)..."):
             with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
                 info = ydl.extract_info(url, download=False)
                 video_title = info.get('title', 'video')
@@ -99,7 +103,6 @@ if url:
                 dl_format = selected_audio['id']
                 post_p = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': str(selected_audio['abr'])}]
 
-            # Merging base bypass options with specific download options
             dl_opts = {
                 **ydl_opts_base,
                 'format': dl_format,
@@ -131,11 +134,13 @@ if url:
                             file_name=final_filename,
                             mime="video/mp4" if btn_video else "audio/mpeg"
                         )
+                    # Clean up
+                    os.remove(file_path)
                 else:
                     st.error("Error: The server finished but the file was not found.")
 
             except Exception as e:
-                st.error(f"Download Error (YouTube Blocked this attempt): {e}")
+                st.error(f"Download Error: {e}")
 
     except Exception as e:
-        st.error(f"Analysis Error: {e}")
+        st.error(f"Analysis Error: YouTube is currently blocking the server. Try a different video or wait 10 minutes.")
