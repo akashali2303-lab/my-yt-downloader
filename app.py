@@ -5,7 +5,7 @@ import re
 
 st.set_page_config(page_title="Ultimate Downloader", page_icon="🎬", layout="wide")
 
-# Custom CSS to make the download button stand out
+# Custom CSS
 st.markdown("""
     <style>
     .stDownloadButton button {
@@ -14,11 +14,6 @@ st.markdown("""
         font-weight: bold !important;
         height: 3em !important;
         width: 100% !important;
-        border: none !important;
-        border-radius: 5px !important;
-    }
-    .stDownloadButton button:hover {
-        background-color: #00994d !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -37,9 +32,19 @@ def progress_hook(d):
 
 if url:
     try:
+        # BYPASS SETTINGS: Mimic a real browser/mobile device
+        # This helps fix the 403 Forbidden error
+        ydl_opts_base = {
+            'quiet': True,
+            'noplaylist': True,
+            'nocheckcertificate': True,
+            'no_warnings': True,
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'extractor_args': {'youtube': {'player_client': ['ios', 'mweb', 'android']}}
+        }
+
         with st.spinner("🔍 Analyzing Video..."):
-            ydl_opts = {'quiet': True, 'noplaylist': True}
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
                 info = ydl.extract_info(url, download=False)
                 video_title = info.get('title', 'video')
                 formats = info.get('formats', [])
@@ -59,11 +64,9 @@ if url:
                         res = f.get('resolution') or f"{f.get('height')}p"
                         size_bytes = f.get('filesize') or f.get('filesize_approx')
                         size_mb = f"{size_bytes/(1024*1024):.1f} MB" if size_bytes else "Variable Size"
-                        
                         label = f"{res} - {size_mb} ({f.get('ext')})"
                         video_options.append({"label": label, "id": f.get('format_id'), "res_val": f.get('height') or 0})
                 
-                # Sort by resolution (highest first) and remove duplicates
                 video_options = list({v['label']: v for v in video_options}.values())
                 video_options.sort(key=lambda x: x['res_val'], reverse=True)
                 
@@ -82,9 +85,7 @@ if url:
                 selected_audio = st.selectbox("Select Audio Quality:", audio_options, format_func=lambda x: x['label'])
                 btn_audio = st.button("🎵 Step 1: Prepare MP3")
 
-        # --- DOWNLOAD LOGIC ---
         if btn_video or btn_audio:
-            # Clean title for filename
             safe_title = re.sub(r'[^\w\s-]', '', video_title).strip()
             status_text = st.empty()
             progress_bar = st.progress(0)
@@ -98,17 +99,14 @@ if url:
                 dl_format = selected_audio['id']
                 post_p = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': str(selected_audio['abr'])}]
 
-            # Use a generic temp name to avoid OS issues with long titles
-            temp_name = "temp_download_file"
-            
+            # Merging base bypass options with specific download options
             dl_opts = {
+                **ydl_opts_base,
                 'format': dl_format,
-                'outtmpl': f"{temp_name}.%(ext)s",
+                'outtmpl': f"temp_file_%(id)s.%(ext)s",
                 'progress_hooks': [progress_hook],
                 'postprocessors': post_p,
                 'merge_output_format': 'mp4' if btn_video else None,
-                'quiet': True,
-                'noplaylist': True
             }
 
             try:
@@ -116,7 +114,6 @@ if url:
                     info_dict = ydl.extract_info(url, download=True)
                     file_path = ydl.prepare_filename(info_dict)
                     
-                    # Correction for extension change
                     if btn_audio:
                         file_path = file_path.rsplit('.', 1)[0] + ".mp3"
                     elif btn_video:
@@ -128,21 +125,17 @@ if url:
                         progress_bar.empty()
                         st.balloons()
                         st.success("✨ STEP 2: File is Ready!")
-                        
                         st.download_button(
                             label=f"💾 CLICK HERE TO SAVE: {final_filename}",
                             data=f,
                             file_name=final_filename,
                             mime="video/mp4" if btn_video else "audio/mpeg"
                         )
-                    # Note: We can't delete immediately after download button because 
-                    # the file needs to stay until the user clicks. 
-                    # Streamlit handles session cleanup usually.
                 else:
-                    st.error("Error: The server could not find the processed file.")
+                    st.error("Error: The server finished but the file was not found.")
 
             except Exception as e:
-                st.error(f"Error during preparation: {e}")
+                st.error(f"Download Error (YouTube Blocked this attempt): {e}")
 
     except Exception as e:
-        st.error(f"Could not analyze video. Error: {e}")
+        st.error(f"Analysis Error: {e}")
