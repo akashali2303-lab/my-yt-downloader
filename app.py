@@ -1,86 +1,107 @@
 import streamlit as st
 import requests
 import re
+import time
 
-st.set_page_config(page_title="Pro Media Downloader", page_icon="⚡", layout="wide")
+st.set_page_config(page_title="Pro Downloader", page_icon="🎬", layout="wide")
 
-# Modern UI Styling
+# Professional Dark UI
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
-    .stTextInput input { background-color: #1e1e1e; color: white; border: 1px solid #ff4b4b; }
-    .stButton button { width: 100%; background-color: #ff4b4b; color: white; font-weight: bold; border-radius: 10px; height: 3em; }
-    .stButton button:hover { background-color: #ff3333; border: none; }
-    .download-card { background-color: #1e1e1e; padding: 25px; border-radius: 15px; border-left: 5px solid #00cc66; margin-top: 20px; }
+    .stTextInput input { background-color: #1e1e1e; color: white; border: 1px solid #3d5afe; }
+    .stButton button { width: 100%; background-color: #3d5afe; color: white; font-weight: bold; border-radius: 8px; height: 3.5em; border: none; }
+    .stButton button:hover { background-color: #536dfe; border: none; color: white; }
+    .status-box { padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 5px solid #3d5afe; background-color: #1e1e1e; }
+    .success-card { background-color: #1e1e1e; padding: 20px; border-radius: 15px; border: 2px solid #00c853; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("⚡ Pro Media Downloader")
-st.write("Fast, high-quality downloads using Cobalt Fallback System.")
+st.title("🎬 Multi-Platform Pro Downloader")
+st.write("If one server fails, we automatically try another. Works for YouTube, TikTok, IG, and Twitter.")
 
-# List of multiple Cobalt API instances (If one is slow, the app tries the next)
-COBALT_INSTANCES = [
+# THE MIRROR LIST (7 Global Instances)
+# We use these because YouTube blocks individual IPs frequently.
+COBALT_MIRRORS = [
     "https://api.cobalt.tools/api/json",
+    "https://cobalt.moe/api/json",
+    "https://cobalt-api.v06.re/api/json",
+    "https://api.wuk.sh/api/json",
     "https://co.wuk.sh/api/json",
-    "https://cobalt.hypert.lol/api/json"
+    "https://cobalt.fastest.sh/api/json",
+    "https://cobalt.sh/api/json"
 ]
 
-url = st.text_input("", placeholder="Paste YouTube, TikTok, or Instagram URL here...")
+url = st.text_input("", placeholder="Paste your link here (YouTube, TikTok, Instagram...)", label_visibility="collapsed")
 
 if url:
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.info("🎯 **Step 1: Select Format**")
-        mode = st.radio("What do you want to download?", ["Video (1080p/Best)", "Audio (MP3)"])
+    c1, c2 = st.columns(2)
+    with c1:
+        quality = st.select_slider("Select Video Quality", options=["360", "480", "720", "1080"], value="1080")
+    with c2:
+        mode = st.selectbox("Download Mode", ["Video + Audio", "Audio Only (MP3)"])
+
+    if st.button("🔍 FIND DOWNLOAD LINK"):
+        success = False
+        progress_text = st.empty()
         
-    with col2:
-        st.info("⚙️ **Step 2: Process**")
-        if st.button("Generate Download Link"):
-            success = False
-            
-            # TRY EACH SERVER UNTIL ONE WORKS
-            for i, api_url in enumerate(COBALT_INSTANCES):
-                try:
-                    with st.spinner(f"Trying Server {i+1}..."):
-                        payload = {
-                            "url": url,
-                            "videoQuality": "1080",
-                            "downloadMode": "audio" if mode == "Audio (MP3)" else "video",
-                            "filenameStyle": "pretty"
-                        }
-                        
-                        # Added a 15-second timeout so it doesn't hang forever
-                        response = requests.post(
-                            api_url, 
-                            json=payload, 
-                            headers={"Accept": "application/json", "Content-Type": "application/json"},
-                            timeout=15 
-                        )
-                        result = response.json()
-                    
-                    if result.get("status") in ["stream", "redirect"]:
-                        download_link = result.get("url")
-                        st.markdown(f"""
-                        <div class="download-card">
-                            <h3 style="color:#00cc66;">✅ File Ready! (Server {i+1})</h3>
-                            <p>Security bypassed. Download will start instantly.</p>
-                            <a href="{download_link}" target="_blank">
-                                <button style="width:100%; padding:15px; background-color:#00cc66; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold; font-size:1.2em;">
-                                    📥 DOWNLOAD FILE NOW
-                                </button>
-                            </a>
-                            <p style="font-size: 0.8em; color: #888; margin-top:10px;">If it plays in browser instead of downloading: <b>Right Click > Save Video As</b>.</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        success = True
-                        break # Stop trying other servers once we win
+        # Loop through all mirrors
+        for i, mirror in enumerate(COBALT_MIRRORS):
+            try:
+                progress_text.markdown(f"<div class='status-box'>📡 Trying Server {i+1} of {len(COBALT_MIRRORS)}...</div>", unsafe_allow_html=True)
                 
-                except Exception:
-                    continue # Try the next server in the list
-            
-            if not success:
-                st.error("❌ All download servers are currently busy or blocked by YouTube. Please try again in 5 minutes.")
+                payload = {
+                    "url": url,
+                    "videoQuality": quality,
+                    "downloadMode": "audio" if "Audio" in mode else "video",
+                    "filenameStyle": "pretty",
+                    "youtubeVideoCodec": "h264" # Most compatible for iPhones/Windows
+                }
+                
+                # We give each server 10 seconds to respond
+                response = requests.post(
+                    mirror, 
+                    json=payload, 
+                    headers={"Accept": "application/json", "Content-Type": "application/json"},
+                    timeout=10
+                )
+                
+                data = response.json()
+                
+                if data.get("status") in ["stream", "redirect"]:
+                    final_url = data.get("url")
+                    progress_text.empty()
+                    
+                    st.markdown(f"""
+                    <div class="success-card">
+                        <h2 style="color:#00c853;">🎉 Success! Server {i+1} Worked</h2>
+                        <p>Your download is ready. Click the button below.</p>
+                        <a href="{final_url}" target="_blank">
+                            <button style="width:100%; padding:15px; background-color:#00c853; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold; font-size:1.2em;">
+                                📥 SAVE FILE TO DEVICE
+                            </button>
+                        </a>
+                        <p style="font-size: 0.8em; color: #888; margin-top:10px;">
+                            If it plays in the browser, <b>Right-Click</b> and select <b>'Save Video As'</b>.
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.balloons()
+                    success = True
+                    break
+                
+                elif data.get("status") == "error":
+                    # If server returns error, we move to the next one
+                    continue
+
+            except Exception:
+                # If server times out or crashes, we move to the next one
+                continue
+        
+        if not success:
+            progress_text.empty()
+            st.error("❌ YouTube is currently blocking all our cloud servers. This usually lasts for 15-30 minutes. Please try again later or try a different video.")
+            st.info("💡 **Tip:** YouTube sometimes blocks high-quality (1080p) requests from cloud servers. Try selecting **720p** or **Audio Only** to see if it works.")
 
 st.markdown("---")
-st.caption("No ads. No tracking. Pure speed.")
+st.caption("Powered by the Global Cobalt Network.")
