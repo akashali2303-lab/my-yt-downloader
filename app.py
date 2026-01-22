@@ -1,146 +1,76 @@
 import streamlit as st
-import yt_dlp
-import os
+import requests
 import re
 
-st.set_page_config(page_title="Ultimate Downloader", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="Pro Media Downloader", page_icon="⚡", layout="wide")
 
-# Custom CSS
+# Modern UI Styling
 st.markdown("""
     <style>
-    .stDownloadButton button {
-        background-color: #00cc66 !important;
-        color: white !important;
-        font-weight: bold !important;
-        height: 3em !important;
-        width: 100% !important;
-    }
+    .main { background-color: #0e1117; }
+    .stTextInput input { background-color: #1e1e1e; color: white; border: 1px solid #ff4b4b; }
+    .stButton button { width: 100%; background-color: #ff4b4b; color: white; font-weight: bold; border-radius: 10px; height: 3em; }
+    .stButton button:hover { background-color: #ff3333; border: none; }
+    .download-card { background-color: #1e1e1e; padding: 20px; border-radius: 15px; border-left: 5px solid #ff4b4b; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎬 Ultimate YouTube Downloader")
-url = st.text_input("Paste YouTube URL:", placeholder="https://www.youtube.com/watch?v=...")
+st.title("⚡ Pro Media Downloader")
+st.write("Fast, high-quality downloads without 'Bot' errors. Powered by Cobalt.")
 
-def progress_hook(d):
-    if d['status'] == 'downloading':
-        p = d.get('_percent_str', '0%').replace('%','')
-        try:
-            progress_bar.progress(float(p)/100)
-            status_text.text(f"📥 STEP 1: Server is grabbing file... {d.get('_percent_str')} | Speed: {d.get('_speed_str')}")
-        except:
-            pass
+url = st.text_input("", placeholder="Paste YouTube, TikTok, or Instagram URL here...")
 
 if url:
-    try:
-        # ADVANCED BYPASS: Switching to Android/TV clients which rarely ask for "Sign in"
-        ydl_opts_base = {
-            'quiet': True,
-            'noplaylist': True,
-            'nocheckcertificate': True,
-            'no_warnings': True,
-            # This is the magic part: it forces yt-dlp to use clients that don't trigger the "Bot" check easily
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android_test', 'web_embedded'],
-                    'po_token': ['web+QUFE...'] # Fake token structure hint
-                }
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        st.info("🎯 **Step 1: Select Format**")
+        mode = st.radio("What do you want to download?", ["Video (High Quality)", "Audio (MP3)"])
+        
+    with col2:
+        st.info("⚙️ **Step 2: Process**")
+        if st.button("Generate Download Link"):
+            # We use a public Cobalt instance API
+            # This handles the bot bypass for us!
+            api_url = "https://api.cobalt.tools/api/json"
+            
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json"
             }
-        }
-
-        with st.spinner("🔍 Analyzing Video (Bypassing Bot Check)..."):
-            with yt_dlp.YoutubeDL(ydl_opts_base) as ydl:
-                info = ydl.extract_info(url, download=False)
-                video_title = info.get('title', 'video')
-                formats = info.get('formats', [])
-                thumbnail = info.get('thumbnail')
-
-        col1, col2 = st.columns([1, 2])
-        with col1:
-            st.image(thumbnail, use_container_width=True)
-        with col2:
-            st.subheader(video_title)
-            tab_video, tab_audio = st.tabs(["📺 Video Formats", "🎵 Audio Only (MP3)"])
-
-            with tab_video:
-                video_options = []
-                for f in formats:
-                    if f.get('vcodec') != 'none':
-                        res = f.get('resolution') or f"{f.get('height')}p"
-                        size_bytes = f.get('filesize') or f.get('filesize_approx')
-                        size_mb = f"{size_bytes/(1024*1024):.1f} MB" if size_bytes else "Variable Size"
-                        label = f"{res} - {size_mb} ({f.get('ext')})"
-                        video_options.append({"label": label, "id": f.get('format_id'), "res_val": f.get('height') or 0})
-                
-                video_options = list({v['label']: v for v in video_options}.values())
-                video_options.sort(key=lambda x: x['res_val'], reverse=True)
-                
-                if video_options:
-                    selected_video = st.selectbox("Select Video Quality:", video_options, format_func=lambda x: x['label'])
-                    btn_video = st.button("🚀 Step 1: Prepare Video")
-                else:
-                    st.warning("No video formats found.")
-                    btn_video = False
-
-            with tab_audio:
-                audio_options = [
-                    {"label": "High Quality (320kbps)", "id": "bestaudio/best", "abr": 320},
-                    {"label": "Medium Quality (128kbps)", "id": "bestaudio/best", "abr": 128},
-                ]
-                selected_audio = st.selectbox("Select Audio Quality:", audio_options, format_func=lambda x: x['label'])
-                btn_audio = st.button("🎵 Step 1: Prepare MP3")
-
-        if btn_video or btn_audio:
-            safe_title = re.sub(r'[^\w\s-]', '', video_title).strip()
-            status_text = st.empty()
-            progress_bar = st.progress(0)
-
-            if btn_video:
-                final_filename = f"{safe_title}.mp4"
-                dl_format = f"{selected_video['id']}+bestaudio/best"
-                post_p = []
-            else:
-                final_filename = f"{safe_title}.mp3"
-                dl_format = selected_audio['id']
-                post_p = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': str(selected_audio['abr'])}]
-
-            dl_opts = {
-                **ydl_opts_base,
-                'format': dl_format,
-                'outtmpl': f"temp_file_%(id)s.%(ext)s",
-                'progress_hooks': [progress_hook],
-                'postprocessors': post_p,
-                'merge_output_format': 'mp4' if btn_video else None,
+            
+            payload = {
+                "url": url,
+                "videoQuality": "1080", # Max quality
+                "downloadMode": "audio" if mode == "Audio (MP3)" else "video",
+                "filenameStyle": "pretty"
             }
-
+            
             try:
-                with yt_dlp.YoutubeDL(dl_opts) as ydl:
-                    info_dict = ydl.extract_info(url, download=True)
-                    file_path = ydl.prepare_filename(info_dict)
+                with st.spinner("Bypassing YouTube security..."):
+                    response = requests.post(api_url, json=payload, headers=headers)
+                    result = response.json()
+                
+                if result.get("status") == "stream" or result.get("status") == "redirect":
+                    download_link = result.get("url")
                     
-                    if btn_audio:
-                        file_path = file_path.rsplit('.', 1)[0] + ".mp3"
-                    elif btn_video:
-                        file_path = file_path.rsplit('.', 1)[0] + ".mp4"
-
-                if os.path.exists(file_path):
-                    with open(file_path, "rb") as f:
-                        status_text.empty()
-                        progress_bar.empty()
-                        st.balloons()
-                        st.success("✨ STEP 2: File is Ready!")
-                        st.download_button(
-                            label=f"💾 CLICK HERE TO SAVE: {final_filename}",
-                            data=f,
-                            file_name=final_filename,
-                            mime="video/mp4" if btn_video else "audio/mpeg"
-                        )
-                    # Clean up
-                    os.remove(file_path)
+                    st.markdown(f"""
+                    <div class="download-card">
+                        <h3>✅ Success! Your file is ready.</h3>
+                        <p>Cobalt has bypassed the security. Click the button below to save the file.</p>
+                        <a href="{download_link}" target="_blank">
+                            <button style="width:100%; padding:15px; background-color:#00cc66; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">
+                                📥 DOWNLOAD NOW
+                            </button>
+                        </a>
+                        <p style="font-size: 0.8em; color: #888; margin-top:10px;">Note: If the video plays in browser, right-click and 'Save Video As'.</p>
+                    </div>
+                    """, unsafe_allow_html=True)
                 else:
-                    st.error("Error: The server finished but the file was not found.")
-
+                    st.error(f"Error: {result.get('text', 'Could not process this link.')}")
+                    
             except Exception as e:
-                st.error(f"Download Error: {e}")
+                st.error("The Cobalt service is currently busy. Please try again in a moment.")
 
-    except Exception as e:
-        st.error(f"Analysis Error: YouTube is currently blocking the server. Try a different video or wait 10 minutes.")
+st.markdown("---")
+st.caption("Supports: YouTube, Twitter, TikTok, Instagram, and more.")
