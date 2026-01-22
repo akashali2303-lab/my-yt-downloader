@@ -1,107 +1,106 @@
 import streamlit as st
 import requests
 import re
-import time
 
-st.set_page_config(page_title="Pro Downloader", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="Universal Downloader", page_icon="🎬", layout="wide")
 
-# Professional Dark UI
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
-    .stTextInput input { background-color: #1e1e1e; color: white; border: 1px solid #3d5afe; }
-    .stButton button { width: 100%; background-color: #3d5afe; color: white; font-weight: bold; border-radius: 8px; height: 3.5em; border: none; }
-    .stButton button:hover { background-color: #536dfe; border: none; color: white; }
-    .status-box { padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 5px solid #3d5afe; background-color: #1e1e1e; }
-    .success-card { background-color: #1e1e1e; padding: 20px; border-radius: 15px; border: 2px solid #00c853; text-align: center; }
+    .stButton button { width: 100%; background-color: #ff4b4b; color: white; font-weight: bold; border-radius: 10px; height: 3.5em; }
+    .download-card { background-color: #1e1e1e; padding: 20px; border-radius: 15px; border-left: 5px solid #00cc66; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎬 Multi-Platform Pro Downloader")
-st.write("If one server fails, we automatically try another. Works for YouTube, TikTok, IG, and Twitter.")
+st.title("🎬 Universal Pro Downloader")
+st.write("Bypassing YouTube blocks using Hybrid Proxy Logic.")
 
-# THE MIRROR LIST (7 Global Instances)
-# We use these because YouTube blocks individual IPs frequently.
-COBALT_MIRRORS = [
-    "https://api.cobalt.tools/api/json",
-    "https://cobalt.moe/api/json",
-    "https://cobalt-api.v06.re/api/json",
-    "https://api.wuk.sh/api/json",
-    "https://co.wuk.sh/api/json",
-    "https://cobalt.fastest.sh/api/json",
-    "https://cobalt.sh/api/json"
+# List of backup engines
+COBALT_URLS = ["https://api.cobalt.tools/api/json", "https://co.wuk.sh/api/json"]
+INVIDIOUS_INSTANCES = [
+    "https://invidious.flokinet.to",
+    "https://yewtu.be",
+    "https://inv.tux.rs",
+    "https://invidious.nerdvpn.de"
 ]
 
-url = st.text_input("", placeholder="Paste your link here (YouTube, TikTok, Instagram...)", label_visibility="collapsed")
+url = st.text_input("", placeholder="Paste your link here...")
 
 if url:
-    c1, c2 = st.columns(2)
-    with c1:
-        quality = st.select_slider("Select Video Quality", options=["360", "480", "720", "1080"], value="1080")
-    with c2:
-        mode = st.selectbox("Download Mode", ["Video + Audio", "Audio Only (MP3)"])
-
-    if st.button("🔍 FIND DOWNLOAD LINK"):
+    mode = st.radio("Format:", ["Video (MP4)", "Audio (MP3)"], horizontal=True)
+    
+    if st.button("🚀 GENERATE DOWNLOAD LINK"):
         success = False
-        progress_text = st.empty()
-        
-        # Loop through all mirrors
-        for i, mirror in enumerate(COBALT_MIRRORS):
+        status = st.empty()
+
+        # --- PHASE 1: TRY COBALT (High Quality 1080p) ---
+        status.info("📡 Phase 1: Contacting Global Download Nodes...")
+        for api in COBALT_URLS:
             try:
-                progress_text.markdown(f"<div class='status-box'>📡 Trying Server {i+1} of {len(COBALT_MIRRORS)}...</div>", unsafe_allow_html=True)
-                
                 payload = {
                     "url": url,
-                    "videoQuality": quality,
+                    "videoQuality": "720", # 720 is more stable than 1080 for cloud bypass
                     "downloadMode": "audio" if "Audio" in mode else "video",
                     "filenameStyle": "pretty",
-                    "youtubeVideoCodec": "h264" # Most compatible for iPhones/Windows
+                    "youtubeVideoCodec": "h264"
                 }
-                
-                # We give each server 10 seconds to respond
-                response = requests.post(
-                    mirror, 
-                    json=payload, 
-                    headers={"Accept": "application/json", "Content-Type": "application/json"},
-                    timeout=10
-                )
-                
-                data = response.json()
-                
+                res = requests.post(api, json=payload, headers={"Accept": "application/json"}, timeout=8)
+                data = res.json()
                 if data.get("status") in ["stream", "redirect"]:
-                    final_url = data.get("url")
-                    progress_text.empty()
-                    
+                    dl_link = data.get("url")
+                    st.balloons()
                     st.markdown(f"""
-                    <div class="success-card">
-                        <h2 style="color:#00c853;">🎉 Success! Server {i+1} Worked</h2>
-                        <p>Your download is ready. Click the button below.</p>
-                        <a href="{final_url}" target="_blank">
-                            <button style="width:100%; padding:15px; background-color:#00c853; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold; font-size:1.2em;">
-                                📥 SAVE FILE TO DEVICE
+                    <div class="download-card">
+                        <h3 style="color:#00cc66;">✅ High-Speed Link Ready</h3>
+                        <a href="{dl_link}" target="_blank">
+                            <button style="width:100%; padding:15px; background-color:#00cc66; color:white; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">
+                                📥 DOWNLOAD NOW
                             </button>
                         </a>
-                        <p style="font-size: 0.8em; color: #888; margin-top:10px;">
-                            If it plays in the browser, <b>Right-Click</b> and select <b>'Save Video As'</b>.
-                        </p>
                     </div>
                     """, unsafe_allow_html=True)
-                    st.balloons()
                     success = True
                     break
-                
-                elif data.get("status") == "error":
-                    # If server returns error, we move to the next one
-                    continue
-
-            except Exception:
-                # If server times out or crashes, we move to the next one
+            except:
                 continue
-        
+
+        # --- PHASE 2: TRY INVIDIOUS PROXY (The Ultimate Backup) ---
         if not success:
-            progress_text.empty()
-            st.error("❌ YouTube is currently blocking all our cloud servers. This usually lasts for 15-30 minutes. Please try again later or try a different video.")
-            st.info("💡 **Tip:** YouTube sometimes blocks high-quality (1080p) requests from cloud servers. Try selecting **720p** or **Audio Only** to see if it works.")
+            status.info("📡 Phase 2: Cobalt blocked. Switching to Invidious Proxies...")
+            video_id_match = re.search(r"(?:v=|\/)([0-9A-Za-z_-]{11}).*", url)
+            if video_id_match:
+                vid = video_id_match.group(1)
+                for instance in INVIDIOUS_INSTANCES:
+                    try:
+                        # We look for direct video streams from Invidious
+                        api_url = f"{instance}/api/v1/videos/{vid}"
+                        res = requests.get(api_url, timeout=5)
+                        data = res.json()
+                        # Get the first available MP4 stream
+                        streams = data.get("formatStreams", [])
+                        if streams:
+                            dl_link = streams[-1].get("url") # Take highest quality available
+                            status.empty()
+                            st.markdown(f"""
+                            <div class="download-card" style="border-left-color: #ffcc00;">
+                                <h3 style="color:#ffcc00;">⚠️ Standard Quality Link Ready</h3>
+                                <p>YouTube blocked high-speed servers. This is a secure backup link.</p>
+                                <a href="{dl_link}" target="_blank">
+                                    <button style="width:100%; padding:15px; background-color:#ffcc00; color:black; border:none; border-radius:10px; cursor:pointer; font-weight:bold;">
+                                        📥 DOWNLOAD FROM PROXY
+                                    </button>
+                                </a>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            success = True
+                            break
+                    except:
+                        continue
+
+        if not success:
+            status.empty()
+            st.error("❌ Deep Block: YouTube is currently blocking all known cloud bypasses for this video. Please try again in 1 hour or try a different video.")
+            st.info("💡 **Pro Tip:** Try a **TikTok** or **Twitter** link; they almost never get blocked!")
 
 st.markdown("---")
-st.caption("Powered by the Global Cobalt Network.")
+st.caption("Anti-Block Engine v4.0 (Hybrid Cobalt/Invidious)")
