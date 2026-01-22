@@ -14,9 +14,14 @@ st.markdown("""
         font-weight: bold !important;
         height: 3em !important;
         width: 100% !important;
+        border: none !important;
+        border-radius: 5px !important;
+    }
+    .stDownloadButton button:hover {
+        background-color: #00994d !important;
     }
     </style>
-    """, unsafe_allow_name=True)
+    """, unsafe_allow_html=True)
 
 st.title("🎬 Ultimate YouTube Downloader")
 url = st.text_input("Paste YouTube URL:", placeholder="https://www.youtube.com/watch?v=...")
@@ -52,7 +57,6 @@ if url:
                 for f in formats:
                     if f.get('vcodec') != 'none':
                         res = f.get('resolution') or f"{f.get('height')}p"
-                        # Use filesize or filesize_approx
                         size_bytes = f.get('filesize') or f.get('filesize_approx')
                         size_mb = f"{size_bytes/(1024*1024):.1f} MB" if size_bytes else "Variable Size"
                         
@@ -63,8 +67,12 @@ if url:
                 video_options = list({v['label']: v for v in video_options}.values())
                 video_options.sort(key=lambda x: x['res_val'], reverse=True)
                 
-                selected_video = st.selectbox("Select Video Quality:", video_options, format_func=lambda x: x['label'])
-                btn_video = st.button("🚀 Step 1: Prepare Video")
+                if video_options:
+                    selected_video = st.selectbox("Select Video Quality:", video_options, format_func=lambda x: x['label'])
+                    btn_video = st.button("🚀 Step 1: Prepare Video")
+                else:
+                    st.warning("No video formats found.")
+                    btn_video = False
 
             with tab_audio:
                 audio_options = [
@@ -90,13 +98,17 @@ if url:
                 dl_format = selected_audio['id']
                 post_p = [{'key': 'FFmpegExtractAudio','preferredcodec': 'mp3','preferredquality': str(selected_audio['abr'])}]
 
+            # Use a generic temp name to avoid OS issues with long titles
+            temp_name = "temp_download_file"
+            
             dl_opts = {
                 'format': dl_format,
-                'outtmpl': f"download_{safe_title}.%(ext)s",
+                'outtmpl': f"{temp_name}.%(ext)s",
                 'progress_hooks': [progress_hook],
                 'postprocessors': post_p,
                 'merge_output_format': 'mp4' if btn_video else None,
-                'quiet': True
+                'quiet': True,
+                'noplaylist': True
             }
 
             try:
@@ -104,7 +116,7 @@ if url:
                     info_dict = ydl.extract_info(url, download=True)
                     file_path = ydl.prepare_filename(info_dict)
                     
-                    # Correction for extension change (e.g. .m4a to .mp3)
+                    # Correction for extension change
                     if btn_audio:
                         file_path = file_path.rsplit('.', 1)[0] + ".mp3"
                     elif btn_video:
@@ -116,19 +128,21 @@ if url:
                         progress_bar.empty()
                         st.balloons()
                         st.success("✨ STEP 2: File is Ready!")
-                        # THE ACTUAL DOWNLOAD BUTTON
+                        
                         st.download_button(
                             label=f"💾 CLICK HERE TO SAVE: {final_filename}",
                             data=f,
                             file_name=final_filename,
                             mime="video/mp4" if btn_video else "audio/mpeg"
                         )
-                    os.remove(file_path) # Clean up server
+                    # Note: We can't delete immediately after download button because 
+                    # the file needs to stay until the user clicks. 
+                    # Streamlit handles session cleanup usually.
                 else:
-                    st.error("File was created but could not be found. Try a different quality.")
+                    st.error("Error: The server could not find the processed file.")
 
             except Exception as e:
                 st.error(f"Error during preparation: {e}")
 
     except Exception as e:
-        st.error(f"Could not analyze video. YouTube might be blocking this request. Error: {e}")
+        st.error(f"Could not analyze video. Error: {e}")
